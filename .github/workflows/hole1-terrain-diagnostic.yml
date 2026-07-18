@@ -1,0 +1,67 @@
+name: Hole 1 terrain diagnostic
+
+on:
+  push:
+    branches: [hole-1-green-detail]
+  workflow_dispatch:
+
+jobs:
+  terrain-diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install geospatial dependencies
+        run: pip install rasterio matplotlib numpy scipy pillow
+      - name: Download verified DroneDeploy rasters
+        env:
+          DTM_URL: "https://uc45815d7b9a75bfe8df8f0d99b1.dl.dropboxusercontent.com/cd/0/get/DEirQ57W0o8d3fyIFIsuAqA-yzRaMaIq5x377Y2n8hOo2wHFOjz66SSlBMq3j-5T5cNmkjglpfOgJT9GyCRoaIVmiy3891-dPFJ_TrOXvajSPsgL4QvHE-BLIuHmv8NiaqLtsWLP6Ehcd9F8Rcig7TAEzBTX-QYUG1rNSuXWiXBwGA/file?c_luid=4e03bdff"
+          ORTHO_URL: "https://uc6507afa00ef6b295412d36bdeb.dl.dropboxusercontent.com/cd/0/get/DEjN1hBSpGcIK4ummZ0xZq7GOte8PPF0Rjiys2Lsw-xkb_-I7GbFjoFzrJoCQRNpvSkL9I-0U_uzsMi2mZlVAjCDeti-Z4-WVZIZH-Ao4YWBJu3N_x0b4zOPCYsp2JIWCM-JbNLVuTdmC4TUvPVyWa4IIu023qCeN2h3mQjyKPRa2g/file?c_luid=4e03bdff"
+        run: |
+          mkdir -p data outputs
+          curl -L --fail "$DTM_URL" -o data/hole1_dtm.tif
+          curl -L --fail "$ORTHO_URL" -o data/hole1_ortho.tif
+      - name: Build diagnostic sheets
+        run: |
+          python - <<'PY'
+          import json
+          import numpy as np
+          import rasterio
+          import matplotlib.pyplot as plt
+          from scipy.ndimage import gaussian_filter
+          from rasterio.enums import Resampling
+
+          with rasterio.open('data/hole1_dtm.tif') as ds:
+              scale=max(ds.width/1800, ds.height/1800, 1)
+              h=max(1,int(ds.height/scale)); w=max(1,int(ds.width/scale))
+              z=ds.read(1,out_shape=(h,w),resampling=Resampling.bilinear).astype(float)
+              nodata=ds.nodata
+              if nodata is not None: z[z==nodata]=np.nan
+              meta={'dtm_width':ds.width,'dtm_height':ds.height,'dtm_crs':str(ds.crs),'dtm_transform':list(ds.transform),'dtm_bounds':list(ds.bounds),'dtm_min':float(np.nanmin(z)),'dtm_max':float(np.nanmax(z))}
+          fill=np.nanmedian(z); sm=gaussian_filter(np.where(np.isfinite(z),z,fill),1.2)
+          dy,dx=np.gradient(sm); slope=np.hypot(dx,dy)
+          fig,ax=plt.subplots(figsize=(8,12),dpi=200)
+          im=ax.imshow(sm,cmap='terrain')
+          ax.contour(sm,levels=30,colors='white',linewidths=.25,alpha=.7)
+          ax.set_title('Hole 1 DTM overview — select green crop')
+          ax.set_axis_off(); fig.colorbar(im,ax=ax,shrink=.55,label='Elevation source units')
+          fig.tight_layout(); fig.savefig('outputs/dtm_overview.png'); plt.close(fig)
+
+          with rasterio.open('data/hole1_ortho.tif') as ds:
+              scale=max(ds.width/2200, ds.height/2200, 1)
+              h=max(1,int(ds.height/scale)); w=max(1,int(ds.width/scale))
+              rgb=ds.read([1,2,3],out_shape=(3,h,w),resampling=Resampling.bilinear)
+              meta.update({'ortho_width':ds.width,'ortho_height':ds.height,'ortho_crs':str(ds.crs),'ortho_transform':list(ds.transform),'ortho_bounds':list(ds.bounds)})
+          img=np.moveaxis(rgb,0,-1).astype(float)
+          lo,hi=np.percentile(img[img>0],[2,98]); img=np.clip((img-lo)/max(hi-lo,1),0,1)
+          fig,ax=plt.subplots(figsize=(8,12),dpi=200)
+          ax.imshow(img); ax.set_title('Hole 1 orthomosaic overview — green identification'); ax.set_axis_off()
+          fig.tight_layout(); fig.savefig('outputs/ortho_overview.jpg',quality=92); plt.close(fig)
+          open('outputs/raster_metadata.json','w').write(json.dumps(meta,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hole1-terrain-diagnostic
+          path: outputs/
