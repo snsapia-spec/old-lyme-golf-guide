@@ -3,6 +3,8 @@ name: Hole 1 terrain diagnostic
 on:
   push:
     branches: [hole-1-green-detail]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -41,7 +43,6 @@ jobs:
               if nodata is not None: z[z==nodata]=np.nan
               meta={'dtm_width':ds.width,'dtm_height':ds.height,'dtm_crs':str(ds.crs),'dtm_transform':list(ds.transform),'dtm_bounds':list(ds.bounds),'dtm_min':float(np.nanmin(z)),'dtm_max':float(np.nanmax(z))}
           fill=np.nanmedian(z); sm=gaussian_filter(np.where(np.isfinite(z),z,fill),1.2)
-          dy,dx=np.gradient(sm); slope=np.hypot(dx,dy)
           fig,ax=plt.subplots(figsize=(8,12),dpi=200)
           im=ax.imshow(sm,cmap='terrain')
           ax.contour(sm,levels=30,colors='white',linewidths=.25,alpha=.7)
@@ -58,7 +59,7 @@ jobs:
           lo,hi=np.percentile(img[img>0],[2,98]); img=np.clip((img-lo)/max(hi-lo,1),0,1)
           fig,ax=plt.subplots(figsize=(8,12),dpi=200)
           ax.imshow(img); ax.set_title('Hole 1 orthomosaic overview — green identification'); ax.set_axis_off()
-          fig.tight_layout(); fig.savefig('outputs/ortho_overview.jpg',quality=92); plt.close(fig)
+          fig.tight_layout(); fig.savefig('outputs/ortho_overview.jpg'); plt.close(fig)
           open('outputs/raster_metadata.json','w').write(json.dumps(meta,indent=2))
           PY
       - uses: actions/upload-artifact@v4
