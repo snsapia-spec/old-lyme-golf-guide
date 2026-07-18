@@ -1,0 +1,37 @@
+{
+  "hole": 1,
+  "status": "source files verified in Dropbox",
+  "primary_sources": {
+    "dtm": {
+      "dropbox_path": "/Nick Sapia/Golf Caddie/OLCC Hole 1/Data Exports/MapPlan2_DTM_SatJul04212139036519/MapPlan2_DTM_export_SatJul04212139036519.tif",
+      "size_bytes": 2572869,
+      "role": "primary elevation surface"
+    },
+    "orthomosaic": {
+      "dropbox_path": "/Nick Sapia/Golf Caddie/OLCC Hole 1/Data Exports/MapPlan2_Orthomosaic_SatJul04212124049798/MapPlan2_ortho_export_SatJul04212124049798.tif",
+      "size_bytes": 126131073,
+      "role": "green boundary, collar, bunker, water, and approach geometry"
+    },
+    "point_cloud": {
+      "dropbox_path": "/Nick Sapia/Golf Caddie/OLCC Hole 1/Data Exports/points.las",
+      "size_bytes": 208675301,
+      "role": "secondary terrain validation"
+    },
+    "mesh": {
+      "dropbox_path": "/Nick Sapia/Golf Caddie/OLCC Hole 1/Data Exports/MapPlan2_3DModel_SatJul04212309266443/scene_mesh_textured.obj",
+      "size_bytes": 21239536,
+      "role": "secondary surface-form and visual validation"
+    }
+  },
+  "field_app_reference": {
+    "use": "qualitative calibration only",
+    "observed_pattern": "high back-left, low front-right, dominant fall toward pond side",
+    "publication_rule": "do not publish numeric slope or relief until verified against DTM"
+  },
+  "expected_outputs": [
+    "hole-1-green-plate.png",
+    "hole-1-green-plate.svg",
+    "hole-1-green-metrics.json",
+    "hole-1-green-contours.geojson"
+  ]
+}
