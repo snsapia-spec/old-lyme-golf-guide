@@ -22,4 +22,4 @@ jobs:
         run: pip install rasterio matplotlib numpy scipy pillow
       - name: Download verified Hole 2 DroneDeploy exports
         env:
-          ORTHO_URL: "https://uc785ce8d91661e0ac8506aa74e0.dl.dropboxusercontent.com/cd/0/get/DEj3oeJ01JhKPhz-U8KKUZWnu_h5Dx
+          ORTHO_URL: "https://ucba554d35ec6c77d9a8a65956ed.dl.dropboxusercontent.com/cd/0/get/DEjLoXiDlYGUlvhS2KuPj5oJn-2cq5KUkb0YJuM2DwZPKrIY_ehY
