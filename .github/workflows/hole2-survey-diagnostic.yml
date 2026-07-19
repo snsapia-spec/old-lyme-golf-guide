@@ -1,0 +1,65 @@
+name: Hole 2 survey diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'source/hole-2/**'
+      - 'scripts/build_hole2_survey.py'
+      - 'requirements-hole2-survey.txt'
+      - '.github/workflows/hole2-survey-diagnostic.yml'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  build-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-hole2-survey.txt
+
+      - name: Install geospatial dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-hole2-survey.txt
+
+      - name: Verify extracted Hole 2 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d source/hole-2
+          echo 'Hole 2 files found:'
+          find source/hole-2 -type f -maxdepth 8 -printf '%P\n' | sort
+          count=$(find source/hole-2 -type f | wc -l)
+          test "$count" -gt 0
+
+      - name: Build survey review plates
+        run: python scripts/build_hole2_survey.py --source source/hole-2 --out outputs/hole-2
+
+      - name: Validate required outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s outputs/hole-2/hole2_orthomosaic_review.jpg
+          test -s outputs/hole-2/hole2_source_report.json
+          python -m json.tool outputs/hole-2/hole2_source_report.json >/dev/null
+          find outputs/hole-2 -type f -printf '%P %s bytes\n' | sort
+
+      - name: Upload survey diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: hole2-survey-diagnostic
+          path: outputs/hole-2/
+          if-no-files-found: error
+          retention-days: 30
