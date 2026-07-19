@@ -1,0 +1,25 @@
+name: Hole 2 DroneDeploy map
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hole2-drone-map.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-hole2-map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install geospatial tools
+        run: pip install rasterio matplotlib numpy scipy pillow
+      - name: Download verified Hole 2 DroneDeploy exports
+        env:
+          ORTHO_URL: "https://uc785ce8d91661e0ac8506aa74e0.dl.dropboxusercontent.com/cd/0/get/DEj3oeJ01JhKPhz-U8KKUZWnu_h5Dx
