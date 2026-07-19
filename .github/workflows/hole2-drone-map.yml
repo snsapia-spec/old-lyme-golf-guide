@@ -1,0 +1,109 @@
+name: Hole 2 DroneDeploy map
+
+on:
+  push:
+    branches: [hole-2-drone-map]
+  workflow_dispatch:
+
+jobs:
+  build-hole2-map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install geospatial tools
+        run: pip install rasterio matplotlib numpy scipy pillow
+      - name: Download verified Hole 2 DroneDeploy exports
+        env:
+          ORTHO_URL: "https://uc262e17e6fc4bca7b1a2ce55870.dl.dropboxusercontent.com/cd/0/get/DEg42c10XYOok3upvrvvinTc8QqdfP5ASRdNnT8q6yK9mFZUFFFoJfsoNBOYWEEPujpUFzg3Qyz43adTzn7MPOxGnbOIFYloaWXLPiF8cYx1TKKiHHAn3aij1Q_2paVtF5hkSrRmamYGpZYmPQQKemnSw7e1JhLfekf5Kqkxn6hM3A/file?c_luid=4e03bdff"
+          DTM_URL: "https://uc6da3729a7177f3af6b7b16b530.dl.dropboxusercontent.com/cd/0/get/DEg5XxnI2OSab8YQM7Lp4Yc7r3OkcFRnU9NnD-m-dDzX1xRhFhpDWmO6eJOAEHqJM4slxQildYqLP02cl3hR1ld04VkDgdBrRLthSdJ5ufz0srB12sYd6kLVfAxn3bSvlIAkqEA3nWt1Pxm-GRgJSeqqZIm-rKrpnbYFs1xb4A9LpQ/file?c_luid=4e03bdff"
+        run: |
+          mkdir -p source/ortho source/dtm outputs
+          curl -L --fail "$ORTHO_URL" -o source/hole2_ortho.zip
+          curl -L --fail "$DTM_URL" -o source/hole2_dtm.zip
+          unzip -o source/hole2_ortho.zip -d source/ortho
+          unzip -o source/hole2_dtm.zip -d source/dtm
+          find source -maxdepth 4 -type f -print
+      - name: Build survey-accurate diagnostic maps
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import numpy as np
+          import rasterio
+          import matplotlib.pyplot as plt
+          from rasterio.enums import Resampling
+          from scipy.ndimage import gaussian_filter
+
+          out = Path('outputs')
+          out.mkdir(exist_ok=True)
+          ortho_candidates = list(Path('source/ortho').rglob('*.tif')) + list(Path('source/ortho').rglob('*.tiff'))
+          dtm_candidates = list(Path('source/dtm').rglob('*.tif')) + list(Path('source/dtm').rglob('*.tiff'))
+          if not ortho_candidates or not dtm_candidates:
+              raise RuntimeError(f'Missing GeoTIFFs: ortho={ortho_candidates}, dtm={dtm_candidates}')
+          ortho_path = ortho_candidates[0]
+          dtm_path = dtm_candidates[0]
+          meta = {'orthomosaic_file': str(ortho_path), 'dtm_file': str(dtm_path)}
+
+          with rasterio.open(ortho_path) as ds:
+              scale=max(ds.width/2200, ds.height/2200, 1)
+              h=max(1,int(ds.height/scale)); w=max(1,int(ds.width/scale))
+              indexes=list(range(1,min(ds.count,3)+1))
+              rgb=ds.read(indexes,out_shape=(len(indexes),h,w),resampling=Resampling.bilinear)
+              if rgb.shape[0] == 1:
+                  rgb=np.repeat(rgb,3,axis=0)
+              elif rgb.shape[0] == 2:
+                  rgb=np.concatenate([rgb,rgb[1:2]],axis=0)
+              img=np.moveaxis(rgb[:3],0,-1).astype(float)
+              nz=img[np.isfinite(img) & (img>0)]
+              lo,hi=np.percentile(nz,[2,98]) if nz.size else (0,1)
+              img=np.clip((img-lo)/max(hi-lo,1),0,1)
+              meta.update({'ortho_width':ds.width,'ortho_height':ds.height,'ortho_crs':str(ds.crs),'ortho_bounds':list(ds.bounds),'ortho_transform':list(ds.transform)})
+          fig,ax=plt.subplots(figsize=(7,12),dpi=240)
+          ax.imshow(img)
+          ax.set_title('Hole 2 — DroneDeploy Orthomosaic')
+          ax.set_axis_off()
+          fig.tight_layout(pad=.15)
+          fig.savefig(out/'hole2_orthomosaic_map.jpg',bbox_inches='tight',pad_inches=.02,quality=95)
+          plt.close(fig)
+
+          with rasterio.open(dtm_path) as ds:
+              scale=max(ds.width/2200, ds.height/2200, 1)
+              h=max(1,int(ds.height/scale)); w=max(1,int(ds.width/scale))
+              z=ds.read(1,out_shape=(h,w),resampling=Resampling.bilinear).astype(float)
+              if ds.nodata is not None:
+                  z[z==ds.nodata]=np.nan
+              valid=np.isfinite(z)
+              fill=float(np.nanmedian(z[valid]))
+              sm=gaussian_filter(np.where(valid,z,fill),1.0)
+              sm[~valid]=np.nan
+              meta.update({'dtm_width':ds.width,'dtm_height':ds.height,'dtm_crs':str(ds.crs),'dtm_bounds':list(ds.bounds),'dtm_transform':list(ds.transform),'dtm_min':float(np.nanmin(sm)),'dtm_max':float(np.nanmax(sm))})
+          fig,ax=plt.subplots(figsize=(7,12),dpi=240)
+          im=ax.imshow(sm,cmap='terrain')
+          levels=np.linspace(np.nanmin(sm),np.nanmax(sm),35)
+          ax.contour(sm,levels=levels,colors='white',linewidths=.25,alpha=.72)
+          ax.set_title('Hole 2 — DroneDeploy DTM + Contours')
+          ax.set_axis_off()
+          fig.colorbar(im,ax=ax,shrink=.55,label='Elevation source units')
+          fig.tight_layout(pad=.15)
+          fig.savefig(out/'hole2_dtm_contours.png',bbox_inches='tight',pad_inches=.02)
+          plt.close(fig)
+
+          # A clean cartographic base that preserves the measured aerial geometry.
+          fig,ax=plt.subplots(figsize=(7,12),dpi=300)
+          ax.imshow(img)
+          ax.imshow(sm,cmap='terrain',alpha=.18)
+          ax.contour(sm,levels=np.linspace(np.nanmin(sm),np.nanmax(sm),28),colors='white',linewidths=.22,alpha=.45)
+          ax.set_axis_off()
+          fig.tight_layout(pad=0)
+          fig.savefig(out/'hole2_survey_base.png',bbox_inches='tight',pad_inches=0)
+          plt.close(fig)
+
+          (out/'hole2_raster_metadata.json').write_text(json.dumps(meta,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hole2-drone-map
+          path: outputs/
